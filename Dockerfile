@@ -1,24 +1,43 @@
-FROM rust:1.67-buster as build
+#An extra layer to get around this bug https://github.com/docker/buildx/issues/395
+#It's there simply to download add required libraries for cargo build
+FROM --platform=$BUILDPLATFORM rust:1.75.0-buster AS rust_fix
 
-ARG BRANCH=master
+ENV USER=root
+ENV V_spotifyd=v0.3.5
 
-WORKDIR /usr/src/
+WORKDIR /usr/src/spotifyd
+RUN apt-get -y update && \
+    apt-get install --no-install-recommends -y apt-transport-https ca-certificates git && \
+    git clone --depth 1 --branch=${V_spotifyd} https://github.com/Spotifyd/spotifyd.git . 
 
-RUN apt-get update && apt-get install -y \
-    gcc-arm-linux-gnueabihf \
-    libc6-dev-armhf-cross \
-    libasound2-dev:armhf \
-    libssl-dev:armhf \
-    git
+# Don't do `cargo init` or --> error: `cargo init` cannot be run on existing Cargo packages
+# RUN cargo init
+RUN mkdir -p .cargo \
+  && cargo vendor > .cargo/config
 
-RUN git clone --branch=${BRANCH} https://github.com/Spotifyd/spotifyd.git
+FROM rust:1.75.0-buster as build
 
-RUN cd spotifyd && \
-    rustup target add armv7-unknown-linux-gnueabihf && \
-    cargo build --target=armv7-unknown-linux-gnueabihf --release
+RUN apt-get -y update && \
+    apt-get install --no-install-recommends -y libasound2-dev build-essential pulseaudio libpulse-dev
 
-FROM arm32v7/debian:buster-slim as release
+COPY --from=rust_fix /usr/src/spotifyd /usr/src/spotifyd
+WORKDIR /usr/src/spotifyd
 
-ENTRYPOINT ["/usr/bin/spotifyd", "--no-daemon"]
+RUN cargo build -j 2 --release --features pulseaudio_backend --offline
 
-COPY --from=build /usr/src/spotifyd/target/armv7-unknown-linux-gnueabihf/release/spotifyd /usr/bin/
+FROM debian:buster-slim as release
+
+CMD ["/usr/bin/spotifyd", "--no-daemon"]
+
+RUN apt-get update && \
+    apt-get install -yqq --no-install-recommends libasound2 pulseaudio && \
+    rm -rf /var/lib/apt/lists/* && \
+    groupadd -r spotify && \
+    useradd --no-log-init -r -g spotify -G audio spotify
+
+COPY --from=build /usr/src/spotifyd/target/release/spotifyd /usr/bin/
+
+WORKDIR /home/spotify
+RUN chmod -R 755 /home/spotify
+
+USER spotify
