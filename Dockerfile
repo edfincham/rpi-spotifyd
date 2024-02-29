@@ -33,11 +33,10 @@ RUN apt-get update && \
     apt-get install -yqq --no-install-recommends libasound2 pulseaudio && \
     rm -rf /var/lib/apt/lists/* && \
     groupadd -r spotify && \
-    useradd --no-log-init -r -g spotify -G audio spotify
+    useradd --no-log-init -m -r -g spotify -G audio spotify
 
 COPY --from=build /usr/src/spotifyd/target/release/spotifyd /usr/bin/
 
-WORKDIR /home/spotify
-RUN chmod -R 755 /home/spotify
+RUN chown -R spotify:spotify /home/spotify
 
-USER spotify
+WORKDIR /home/spotify
