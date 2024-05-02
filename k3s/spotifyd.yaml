@@ -1,0 +1,73 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: spotify-connect
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: spotifyd-conf
+  namespace: spotify-connect
+data:
+  spotifyd.conf: |
+    [global]
+    autoplay = true
+    backend = "pulseaudio"
+    device = "pulse"
+    device_name = "Lest?"
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: spotifyd
+  namespace: spotify-connect
+spec:
+  containers:
+  - command: [
+      "/usr/bin/spotifyd",
+      "--no-daemon",
+      "--config-path",
+      "/etc/spotifyd/spotifyd.conf"
+    ]
+    name: spotify
+    image: edfincham/spotifyd:latest
+    env:
+    - name: PULSE_SERVER
+      value: unix:/tmp/pulseaudio.socket
+    - name: PULSE_COOKIE
+      value: /tmp/pulseaudio.cookie
+    volumeMounts:
+    - name: sound
+      mountPath: /dev/snd
+    - name: pulseaudio-socket
+      mountPath: /tmp/pulseaudio.socket
+    - name: spotifyd-conf
+      mountPath: /etc/spotifyd
+    securityContext:
+      runAsUser: 1000
+      runAsGroup: 29
+  hostNetwork: true
+  volumes:
+  - name: sound
+    hostPath:
+      path: /dev/snd
+  - name: pulseaudio-socket
+    hostPath:
+      path: /run/user/1000/pulse/native
+  - name: spotifyd-conf
+    configMap:
+      name: spotifyd-conf
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: device
+            operator: In
+            values:
+            - hifi
+  tolerations:
+  - key: device
+    operator: Equal
+    value: hifi
+    effect: NoSchedule
