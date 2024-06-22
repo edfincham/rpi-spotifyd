@@ -15,6 +15,7 @@ data:
     backend = "pulseaudio"
     device = "pulse"
     device_name = "Lest?"
+    max_cache_size = 100000000
 ---
 apiVersion: v1
 kind: Pod
