@@ -12,8 +12,8 @@ data:
   spotifyd.conf: |
     [global]
     autoplay = true
-    backend = "pulseaudio"
-    device = "pulse"
+    backend = "alsa"
+    device = "hw:0,0"
     device_name = "Lest?"
     max_cache_size = 100000000
 ---
@@ -24,51 +24,37 @@ metadata:
   namespace: spotify-connect
 spec:
   containers:
-  - command: [
-      "/usr/bin/spotifyd",
-      "--no-daemon",
-      "--config-path",
-      "/etc/spotifyd/spotifyd.conf"
-    ]
-    name: spotify
-    image: edfincham/spotifyd:latest
-    env:
-    - name: PULSE_SERVER
-      value: unix:/tmp/pulseaudio.socket
-    - name: PULSE_COOKIE
-      value: /tmp/pulseaudio.cookie
-    volumeMounts:
-    - name: sound
-      mountPath: /dev/snd
-    - name: pulseaudio-socket
-      mountPath: /tmp/pulseaudio.socket
-    - name: spotifyd-conf
-      mountPath: /etc/spotifyd
-    securityContext:
-      runAsUser: 1000
-      runAsGroup: 29
+    - command: ["/usr/bin/spotifyd", "--no-daemon", "--config-path", "/etc/spotifyd/spotifyd.conf"]
+      name: spotify
+      image: edfincham/spotifyd:latest
+      volumeMounts:
+        - name: sound
+          mountPath: /dev/snd
+        - name: spotifyd-conf
+          mountPath: /etc/spotifyd
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 29
+        privileged: true
   hostNetwork: true
   volumes:
-  - name: sound
-    hostPath:
-      path: /dev/snd
-  - name: pulseaudio-socket
-    hostPath:
-      path: /run/user/1000/pulse/native
-  - name: spotifyd-conf
-    configMap:
-      name: spotifyd-conf
+    - name: sound
+      hostPath:
+        path: /dev/snd
+    - name: spotifyd-conf
+      configMap:
+        name: spotifyd-conf
   affinity:
     nodeAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
         nodeSelectorTerms:
-        - matchExpressions:
-          - key: device
-            operator: In
-            values:
-            - hifi
+          - matchExpressions:
+              - key: device
+                operator: In
+                values:
+                  - hifi
   tolerations:
-  - key: device
-    operator: Equal
-    value: hifi
-    effect: NoSchedule
+    - key: device
+      operator: Equal
+      value: hifi
+      effect: NoSchedule
